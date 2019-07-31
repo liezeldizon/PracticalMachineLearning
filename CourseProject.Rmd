@@ -1,0 +1,88 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Liezel Dizon"
+date: "July 30, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+This document is made in partial fulfillment of the requirements for the Practical Machine Learning course of John Hopkins University (Coursera)
+
+### Methodology
+#### 1. Read dataset
+```{r}
+download.file(url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv',destfile<-"pml-training.csv")
+pml_train <- read.csv("pml-training.csv")
+download.file(url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv',destfile<-"pml-testing.csv")
+pml_test <- read.csv("pml-testing.csv")
+```
+
+#### 2. Cross-validation
+The training set was further splitted into training and testing set (80% train, 20% test) for cross validation and model comparison.
+```{r results='hide', message=FALSE, warning=FALSE}
+library(caret)
+set.seed(222)
+train <- createDataPartition(y=pml_train$classe,p=.80,list=F)
+training <- pml_train[train,]
+testing <- pml_train[-train,]
+```
+
+#### 3. Data Preparation
+Features that are irrelevant and have more than 50% NA were removed from the dataset. 
+```{r fig.width=7, fig.height=4, message=FALSE, warning=FALSE}
+clean <- grep("name|timestamp|window|X", colnames(training), value=F) 
+trainingclean <- training[,-clean]
+
+trainingclean[trainingclean==""] <- NA
+NAs <- apply(trainingclean, 2, function(x) sum(is.na(x)))/nrow(trainingclean)
+trainingclean <- trainingclean[!(NAs>0.50)]
+
+variables <- names(trainingclean)
+features <- variables[-grep("classe",variables)]
+
+testingclean <- testing[,-clean]
+testingclean[testingclean==""] <- NA
+NAs <- apply(testingclean, 2, function(x) sum(is.na(x)))/nrow(testingclean)
+testingclean <- testingclean[!(NAs>0.50)]
+```
+
+#### 4. Modelling and Assessment
+Two models were considered namely, Decision Tree and Random Forest, and a champion model will be chosen based on accuracy, specificity and true positive rate.
+
+##### 4A. Decision Tree
+```{r message=FALSE, warning=FALSE}
+set.seed(222)
+library(rpart)
+library(rpart.plot)
+DTmodel <- rpart(classe ~ ., data=trainingclean, method="class")
+DTprediction <- predict(DTmodel, testingclean, type = "class")
+
+rpart.plot(DTmodel, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+confusionMatrix(table(DTprediction, testingclean$classe))
+```
+
+##### 4B. Random Forest
+```{r message=FALSE, warning=FALSE}
+set.seed(222)
+library(randomForest)
+RFmodel <- randomForest(classe ~., data=trainingclean, type="class")
+RFprediction <- predict(RFmodel, testingclean, type = "class")
+confusionMatrix(table(RFprediction, testingclean$classe))
+```
+
+It can be observed that Random Forest yielded better results. Therefore, Random Forest is the champion model.
+
+#### 5. Predictions
+The Random Forest model is then used to predict the real test set as shown below.
+```{r}
+newtestclean <- pml_test[,-clean]
+newtestclean[newtestclean==""] <- NA
+NAs <- apply(newtestclean, 2, function(x) sum(is.na(x)))/nrow(newtestclean)
+newtestclean <- newtestclean[!(NAs>0.5)]
+newtestclean$classe <- predict(RFmodel,newtestclean)
+newtestclean$classe
+```
